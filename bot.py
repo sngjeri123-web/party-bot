@@ -373,6 +373,14 @@ def get_user_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 
+def get_reregister_keyboard():
+    """Клавиатура для повторной регистрации."""
+    keyboard = [
+        [InlineKeyboardButton("🔄 Зарегаться заново", callback_data="reregister")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь админом."""
     return ADMIN_ID is not None and user_id == ADMIN_ID
@@ -696,12 +704,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_admin_keyboard(),
         )
 
+    # --- Кнопка перерегистрации ---
+    elif data == "reregister":
+        await query.edit_message_text(
+            "🎉 Давай заново!\n\n"
+            "Напиши /start чтобы зарегаться.",
+        )
+        return
+
     # --- Кнопки участников ---
     elif data == "my_cuisine":
         if chat_id not in participants or not participants[chat_id].get("cuisine"):
             await query.edit_message_text(
-                "🤷 Жеребьёвка ещё не была! Подожди.",
-                reply_markup=get_user_keyboard() if chat_id in participants else None,
+                "🤷 Ты не зареган или жеребьёвка ещё не была!",
+                reply_markup=get_reregister_keyboard() if chat_id not in participants else get_user_keyboard(),
             )
             return
         p = participants[chat_id]
@@ -717,8 +733,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "my_mission":
         if chat_id not in participants or not participants[chat_id].get("mission"):
             await query.edit_message_text(
-                "🤷 Жеребьёвка ещё не была! Подожди.",
-                reply_markup=get_user_keyboard() if chat_id in participants else None,
+                "🤷 Ты не зареган или жеребьёвка ещё не была!",
+                reply_markup=get_reregister_keyboard() if chat_id not in participants else get_user_keyboard(),
             )
             return
         p = participants[chat_id]
