@@ -357,6 +357,7 @@ def get_admin_keyboard():
         keyboard.append([InlineKeyboardButton(f"✅ Вы: {names}", callback_data="noop")])
     keyboard.extend([
         [InlineKeyboardButton("📊 Кто зарегался", callback_data="admin_status")],
+        [InlineKeyboardButton("❌ Удалить участника", callback_data="admin_delete")],
         [InlineKeyboardButton("🎲 Запустить жеребьёвку!", callback_data="admin_draw")],
         [InlineKeyboardButton("🔓 Раскрыть задания всем", callback_data="admin_reveal")],
         [InlineKeyboardButton("🔄 Сбросить всё", callback_data="admin_reset")],
@@ -535,6 +536,47 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "\n".join(lines),
             parse_mode="Markdown",
+            reply_markup=get_admin_keyboard(),
+        )
+
+    elif data == "admin_delete" and is_admin(user_id):
+        if not participants:
+            await query.edit_message_text(
+                "🤷 Некого удалять — список пуст!",
+                reply_markup=get_admin_keyboard(),
+            )
+            return
+        keyboard = []
+        for cid, p in participants.items():
+            keyboard.append([InlineKeyboardButton(
+                f"❌ {p['names']}", callback_data=f"del_{cid}"
+            )])
+        keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="admin_back")])
+        await query.edit_message_text(
+            "🗑 Кого удалить?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    elif data.startswith("del_") and is_admin(user_id):
+        cid_to_del = int(data.split("_", 1)[1])
+        if cid_to_del in participants:
+            name = participants[cid_to_del]["names"]
+            del participants[cid_to_del]
+            _save_data()
+            await query.edit_message_text(
+                f"✅ **{name}** удалены!",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard(),
+            )
+        else:
+            await query.edit_message_text(
+                "❓ Участник не найден.",
+                reply_markup=get_admin_keyboard(),
+            )
+
+    elif data == "admin_back" and is_admin(user_id):
+        await query.edit_message_text(
+            "👑 Админ-панель:",
             reply_markup=get_admin_keyboard(),
         )
 
