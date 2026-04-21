@@ -1,5 +1,7 @@
 import os
 import io
+import json
+import base64
 import random
 import logging
 import httpx
@@ -34,11 +36,60 @@ logger = logging.getLogger(__name__)
 WAITING_NAMES = 1
 WAITING_PHOTO = 2
 
-# --- Данные (хранятся в памяти) ---
-# chat_id -> {"names": str, "cuisine": tuple|None, "mission": str|None, "photo": bytes|None, "card": bytes|None}
+# --- Данные ---
+DATA_FILE = os.environ.get("DATA_FILE", "/data/bot_data.json")
 participants = {}
 draw_done = False
 revealed = False
+
+
+def _save_data():
+    """Сохранить данные на диск."""
+    try:
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        data = {
+            "draw_done": draw_done,
+            "revealed": revealed,
+            "participants": {},
+        }
+        for cid, p in participants.items():
+            entry = {
+                "names": p["names"],
+                "cuisine": p.get("cuisine"),
+                "mission": p.get("mission"),
+                "photo": base64.b64encode(p["photo"]).decode() if p.get("photo") else None,
+                "card": base64.b64encode(p["card"]).decode() if p.get("card") else None,
+            }
+            data["participants"][str(cid)] = entry
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, ensure_ascii=False)
+        logger.info(f"Данные сохранены ({len(participants)} участников)")
+    except Exception as e:
+        logger.error(f"Ошибка сохранения данных: {e}")
+
+
+def _load_data():
+    """Загрузить данные с диска."""
+    global participants, draw_done, revealed
+    try:
+        if not os.path.exists(DATA_FILE):
+            return
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+        draw_done = data.get("draw_done", False)
+        revealed = data.get("revealed", False)
+        participants.clear()
+        for cid_str, p in data.get("participants", {}).items():
+            participants[int(cid_str)] = {
+                "names": p["names"],
+                "cuisine": tuple(p["cuisine"]) if p.get("cuisine") else None,
+                "mission": p.get("mission"),
+                "photo": base64.b64decode(p["photo"]) if p.get("photo") else None,
+                "card": base64.b64decode(p["card"]) if p.get("card") else None,
+            }
+        logger.info(f"Данные загружены ({len(participants)} участников)")
+    except Exception as e:
+        logger.error(f"Ошибка загрузки данных: {e}")
 
 # --- Кухни мира (название, эмодзи, описание, код страны для flagcdn) ---
 CUISINES = [
@@ -428,6 +479,7 @@ async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "photo": photo_bytes,
         "card": None,
     }
+    _save_data()
 
     count = len(participants)
     photo_status = "с фото ✨" if photo_bytes else "без фото"
@@ -501,6 +553,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p["mission"] = selected_missions[i]
 
         draw_done = True
+        _save_data()
 
         await query.edit_message_text(
             "🎲 Жеребьёвка запущена! Генерирую карточки... ⏳",
@@ -537,6 +590,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Не удалось отправить сообщение {cid}: {e}")
 
+        _save_data()
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
@@ -563,6 +617,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         revealed = True
+        _save_data()
 
         # Собираем общий список
         lines = ["🔓 **РАСКРЫТИЕ ТАЙНЫХ ЗАДАНИЙ!**\n", "Вот кто что делал весь вечер:\n"]
@@ -627,6 +682,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         participants.clear()
         draw_done = False
         revealed = False
+        _save_data()
         await query.edit_message_text(
             "🔄 Всё сброшено! Можно начинать заново.",
             reply_markup=get_admin_keyboard(),
@@ -728,6 +784,7 @@ async def admin_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             "photo": photo_bytes,
             "card": None,
         }
+        _save_data()
         context.user_data["admin_state"] = None
 
         photo_status = "с фото ✨" if photo_bytes else "без фото"
@@ -803,6 +860,7 @@ def main():
     ))
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    _load_data()
     print("🎉 Бот запущен! Жду участников...")
     print(f"   Админ ID: {ADMIN_ID if ADMIN_ID else 'будет определён при первом /start'}")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
