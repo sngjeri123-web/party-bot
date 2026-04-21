@@ -37,7 +37,7 @@ WAITING_NAMES = 1
 WAITING_PHOTO = 2
 
 # --- Данные ---
-DATA_FILE = os.environ.get("DATA_FILE", "/data/bot_data.json")
+DATA_FILE = os.environ.get("DATA_FILE", "bot_data.json")
 participants = {}
 draw_done = False
 revealed = False
@@ -46,7 +46,9 @@ revealed = False
 def _save_data():
     """Сохранить данные на диск."""
     try:
-        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        dir_name = os.path.dirname(DATA_FILE)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
         data = {
             "draw_done": draw_done,
             "revealed": revealed,
